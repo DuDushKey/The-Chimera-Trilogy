@@ -18,7 +18,7 @@ client = commands.Bot(command_prefix='!', intents=intents)\
 
 players = []
 ready_count = 0
-
+#comment
 @client.command()
 async def ready(ctx):
     global Host
