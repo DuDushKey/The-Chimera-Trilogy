@@ -16,70 +16,115 @@ intents = discord.Intents.all()
 
 client = commands.Bot(command_prefix='!', intents=intents)\
 
-players = []
+client.players = {}
 ready_count = 0
-#comment
+client.isHosted = False
+client.gameHost = ""
+
 @client.command()
 async def ready(ctx):
-    global Host
-    Host = ctx.author
-    await ctx.send(f"Ill join vc and wait for players, feel free to do **!start X** whenever you all are ready with 5v-8 players!")
-    global channel 
-    channel = ctx.author.voice.channel
-    voice_client = await channel.connect()
-    await voice_client.guild.change_voice_state(channel=channel, self_mute=False, self_deaf=True)
-    global bot_ready
-    bot_ready = True
+    hostTemp = str(ctx.author)
+
+    if hostTemp in client.players:
+        client.players[hostTemp][1] = 1
+        state = await printPlayerState()
+        await ctx.send(state)
+        print(hostTemp)
 
 @client.command()
 async def unready(ctx):
-    global channel
-    if Host != ctx.author:
-        await ctx.channel.send(f"You are not the host of this game!")
-    else:
-        voice_client = ctx.voice_client
-        await voice_client.disconnect()
-        await ctx.send(f"Ill go ahead and leave, When you can get a party and want to play again, Please do !ready")
-        await channel.edit(user_limit=0)
-        global bot_ready
-        bot_ready = False
+    hostTemp = str(ctx.author)
 
+    if hostTemp in client.players:
+        client.players[hostTemp][1] = 0
+        state = await printPlayerState()
+        await ctx.send(state)
+        print(client.players)
 
-@client.command()
-async def start(ctx, message):
-    if bot_ready == True:
-        global player_count
-        global channel
-        player_count = int(message)
-        message = int(message)
-        await channel.edit(user_limit=message+1)
-        if message  <= 4 or message >= 9: 
-            await ctx.send(f"please do '!start X' (where x is where x is how many players there are wishing to play in your voice channel!) you may have 5-8 players!")
-        else:
-            ready_check = await ctx.send(f"I'll go ahead and start the game when everyone is ready! Please do !play")
-    else:
-        await ctx.send(f"A game is not running! Please do !ready to start a game")
+async def printPlayerState():
+    sentence = ""
+    for current in client.players:
+        if(client.players[current][1] == 1):    
+            sentence = sentence + current + " is: ✅\n"
+        else: 
+            sentence = sentence + current + " is: ❎\n"
+    return sentence
 
 @client.command()
-async def play(ctx):
-    await ctx.send("A player is ready!")
-    global player_count
-    global players
-    global ready_count
-    players.append(ctx.author)
-    ready_count += 1
-    if ready_count == player_count:
-        await ctx.send("Game Starting, If it was done!")
-        #add the game function here!
-        ready_count = 0
+async def start(ctx):        
+    if (not await joinCall(ctx)):
+        return
+    hostTemp = str(ctx.author)
+    if not client.isHosted:    
+        client.isHosted = True 
+        client.gameHost = hostTemp
+        client.players = {}
+        client.players[hostTemp] = ["None",0]
+        await ctx.send(hostTemp + " is now hosting a new game!")
+        return
     else:
-        pass
+        await ctx.send("A Game is already being hosted!")
+        return
+
+    
+async def joinCall(ctx):
+    if(ctx.author.voice):
+        channel = ctx.author.voice.channel
+        await channel.connect()
+        print(channel)
+        print(ctx.voice_client.channel)
+        return True
+    else:
+        await ctx.send("You must be connected to a voice channel to run this command!")
+        return False
+    
+
+@client.command()
+async def leavecall(ctx):
+    if(ctx.voice_client):
+        await ctx.guild.voice_client.disconnect()
+    else:
+        await ctx.send("I am not in a voice channel!")
+
+@client.command()
+async def leavegame(ctx):
+    tempPlayer = str(ctx.author)
+    if tempPlayer in client.players:
+        del client.players[str(ctx.author)]  
+        await ctx.send(tempPlayer + " has left the game!")
+    
+
+@client.command()
+async def joingame(ctx):
+    if(not ctx.author.voice):
+        await ctx.send("you must be in a voice channel to join a game!")
+        return
+
+    if(ctx.author.voice.channel != ctx.voice_client.channel):
+        await ctx.send("if you want to participate in the game you must be in the same voice channel as the bot!")
+        return
+    
+    if(str(ctx.author) in client.players): 
+        await ctx.send(str(ctx.author) + " is already participating in the game!")
+    else:
+        await ctx.send(str(ctx.author) + " has joined the game!")
+        client.players[str(ctx.author)] = ["None",0]
+        print(client.players[str(ctx.author)])
                 
 
 
-
+@client.event
+async def on_ready():
+    print("INIT DONE")
 
         
+@client.command()
+async def debug(ctx):
+    await ctx.send("isHosted: " + str(client.isHosted) + "\n")
+    if client.isHosted:
+        await ctx.send("Host: " + client.gameHost + "\n")
+    await ctx.send("Players: \n" + str(client.players))
+
 
 @client.command() 
 async def credits(ctx):
