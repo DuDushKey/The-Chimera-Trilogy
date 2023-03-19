@@ -10,7 +10,7 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 GUILD = os.getenv('DISCORD_GUILD')
 
-
+#test
 intents = discord.Intents.all()
 
 
