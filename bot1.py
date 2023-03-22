@@ -50,8 +50,40 @@ async def printPlayerState():
             sentence = sentence + current + " is: ❎\n"
     return sentence
 
+async def checkEveryoneReady():
+    for current in client.players:
+        if(client.players[current][1] == 0):
+            return False
+    return True
+
+async def checkIfPlayer(player):
+    for current in client.players:
+        if(client.players[current][0] == player):
+            return True
+    return False
+
 @client.command()
-async def start(ctx):        
+async def startGame(ctx):
+    if(not checkIfPlayer(str(ctx.author))):
+        return
+    if(not ctx.author.voice):
+        await ctx.send("You are not in a voice channel!")
+        return
+    if(ctx.author.voice.channel != ctx.voice_client.channel):
+        await ctx.send("You are not in the same channel as the Game Host!")
+        return
+    if(not checkEveryoneReady()):
+        await ctx.send("Not everyone is ready!")
+        return
+    else:    
+        if(str(ctx.author) != client.gameHost):
+            await ctx.send("You are not the Host! only the host can start the game!")
+            return
+        await ctx.send("DEBUG: Game Started!")
+        return
+
+@client.command()
+async def host(ctx):        
     if (not await joinCall(ctx)):
         return
     hostTemp = str(ctx.author)
