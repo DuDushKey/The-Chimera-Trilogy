@@ -4,6 +4,7 @@ from discord.utils import get
 from dotenv import load_dotenv
 import os
 from time import sleep
+import random
 
 load_dotenv()
 
@@ -20,6 +21,8 @@ client.players = {}
 ready_count = 0
 client.isHosted = False
 client.gameHost = ""
+client.amountOfSpies = 0
+client.amountOfPlayers = 0
 
 @client.command()
 async def ready(ctx):
@@ -57,22 +60,22 @@ async def checkEveryoneReady():
     return True
 
 async def checkIfPlayer(player):
-    for current in client.players:
-        if(client.players[current][0] == player):
-            return True
-    return False
+    return player in client.players
 
 @client.command()
 async def startGame(ctx):
-    if(not checkIfPlayer(str(ctx.author))):
+    if(not await checkIfPlayer(str(ctx.author))):
+        print("NOT A PLAYER!")
         return
+    '''
     if(not ctx.author.voice):
         await ctx.send("You are not in a voice channel!")
         return
     if(ctx.author.voice.channel != ctx.voice_client.channel):
         await ctx.send("You are not in the same channel as the Game Host!")
         return
-    if(not checkEveryoneReady()):
+    '''
+    if(not await checkEveryoneReady()):
         await ctx.send("Not everyone is ready!")
         return
     else:    
@@ -80,12 +83,24 @@ async def startGame(ctx):
             await ctx.send("You are not the Host! only the host can start the game!")
             return
         await ctx.send("DEBUG: Game Started!")
+        for current in ctx.guild.members:
+            if await checkIfPlayer(str(current)):
+                message = "Your Role is: "
+                if await generateSpy() == 0:
+                    embed = discord.Embed(title=message + "Spy", description="Your job is to sabotage everything!")
+                else:
+                    embed = discord.Embed(title=message + "Innocent", description="Your job is to make sure everything goes well! find that spy!")
+                await current.send(embed=embed)
         return
+
+
+async def generateSpy():
+    return random.randint(0,3)
 
 @client.command()
 async def host(ctx):        
-    if (not await joinCall(ctx)):
-        return
+    #if (not await joinCall(ctx)):
+        #return
     hostTemp = str(ctx.author)
     if not client.isHosted:    
         client.isHosted = True 
@@ -93,6 +108,7 @@ async def host(ctx):
         client.players = {}
         client.players[hostTemp] = ["None",0]
         await ctx.send(hostTemp + " is now hosting a new game!")
+        client.amountOfPlayers += 1
         return
     else:
         await ctx.send("A Game is already being hosted!")
@@ -128,6 +144,7 @@ async def leavegame(ctx):
 
 @client.command()
 async def joingame(ctx):
+    '''
     if(not ctx.author.voice):
         await ctx.send("you must be in a voice channel to join a game!")
         return
@@ -135,12 +152,14 @@ async def joingame(ctx):
     if(ctx.author.voice.channel != ctx.voice_client.channel):
         await ctx.send("if you want to participate in the game you must be in the same voice channel as the bot!")
         return
+    '''
     
     if(str(ctx.author) in client.players): 
         await ctx.send(str(ctx.author) + " is already participating in the game!")
     else:
         await ctx.send(str(ctx.author) + " has joined the game!")
         client.players[str(ctx.author)] = ["None",0]
+        client.amountOfPlayers += 1
         print(client.players[str(ctx.author)])
                 
 
