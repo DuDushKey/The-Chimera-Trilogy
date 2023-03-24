@@ -24,6 +24,10 @@ client.gameHost = ""
 client.amountOfSpies = 0
 client.amountOfPlayers = 0
 
+# 0 = Talking ; 1 = Voting ; 2 = Mission
+client.gamePhase = 0
+client.remainingPhases = 5
+
 @client.command()
 async def ready(ctx):
     hostTemp = str(ctx.author)
@@ -32,7 +36,6 @@ async def ready(ctx):
         client.players[hostTemp][1] = 1
         state = await printPlayerState()
         await ctx.send(state)
-        print(hostTemp)
 
 @client.command()
 async def unready(ctx):
@@ -42,7 +45,6 @@ async def unready(ctx):
         client.players[hostTemp][1] = 0
         state = await printPlayerState()
         await ctx.send(state)
-        print(client.players)
 
 async def printPlayerState():
     sentence = ""
@@ -65,7 +67,6 @@ async def checkIfPlayer(player):
 @client.command()
 async def startGame(ctx):
     if(not await checkIfPlayer(str(ctx.author))):
-        print("NOT A PLAYER!")
         return
     '''
     if(not ctx.author.voice):
@@ -82,15 +83,31 @@ async def startGame(ctx):
         if(str(ctx.author) != client.gameHost):
             await ctx.send("You are not the Host! only the host can start the game!")
             return
-        await ctx.send("DEBUG: Game Started!")
+        
+        if client.amountOfPlayers <= 6 :
+            client.amountOfSpies = 1
+        else:
+            client.amountOfSpies = 2
+        tempDict = client.players
+        while client.amountOfSpies > 0:
+            listHelper = list(tempDict.keys())
+            randomSpy = listHelper[random.randint(0,len(listHelper)-1)]
+            tempDict.pop(randomSpy)
+            for current in ctx.guild.members:
+                if str(current) == randomSpy:
+                    message = "Your Role is: "
+                    embed = discord.Embed(title=message + "Spy", description="Your job is to sabotage everything!\n\n!vote [yes/no], to vote on node-teams\n!secure, to secure a node\n!hack, to hack a node", color=0xff0000)
+                    await current.send(embed=embed)
+            client.amountOfSpies -= 1
         for current in ctx.guild.members:
-            if await checkIfPlayer(str(current)):
-                message = "Your Role is: "
-                if await generateSpy() == 0:
-                    embed = discord.Embed(title=message + "Spy", description="Your job is to sabotage everything!")
-                else:
-                    embed = discord.Embed(title=message + "Innocent", description="Your job is to make sure everything goes well! find that spy!")
-                await current.send(embed=embed)
+            if str(current) in tempDict:
+                    message = "Your Role is: "
+                    embed = discord.Embed(title=message + "Innocent", description="Your job is to make sure everything goes well! find that spy!\n\n!vote [yes/no], to vote on node-teams\n!secure, to secure a node", color=0x00f7ff)
+                    await current.send(embed=embed)
+
+        await ctx.send("Game Has Started!, make sure you checked your role in dm's!")
+
+
         return
 
 
@@ -119,8 +136,6 @@ async def joinCall(ctx):
     if(ctx.author.voice):
         channel = ctx.author.voice.channel
         await channel.connect()
-        print(channel)
-        print(ctx.voice_client.channel)
         return True
     else:
         await ctx.send("You must be connected to a voice channel to run this command!")
@@ -160,7 +175,6 @@ async def joingame(ctx):
         await ctx.send(str(ctx.author) + " has joined the game!")
         client.players[str(ctx.author)] = ["None",0]
         client.amountOfPlayers += 1
-        print(client.players[str(ctx.author)])
                 
 
 
@@ -180,5 +194,4 @@ async def debug(ctx):
 @client.command() 
 async def credits(ctx):
     await ctx.send(f"Vocice acted by <@{540379480968134657}>\nConceptualized by <@{872496091336163438}> and <@{540379480968134657}>\nCode developed by <@{872496091336163438}> and <@{145065060568530944}> and <@{302817055080579084}>\nDebugged by <@{872496091336163438}> and <@{302817055080579084}>  ")
-
 client.run(TOKEN)
