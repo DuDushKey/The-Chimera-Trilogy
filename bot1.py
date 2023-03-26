@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 from time import sleep
 import random
+import asyncio
 
 load_dotenv()
 
@@ -15,18 +16,24 @@ GUILD = os.getenv('DISCORD_GUILD')
 intents = discord.Intents.all()
 
 
-client = commands.Bot(command_prefix='!', intents=intents)\
+client = commands.Bot(command_prefix='!', intents=intents)
 
 client.players = {}
-ready_count = 0
 client.isHosted = False
 client.gameHost = ""
 client.amountOfSpies = 0
 client.amountOfPlayers = 0
+client.spies = {}
 
 # 0 = Talking ; 1 = Voting ; 2 = Mission
 client.gamePhase = 0
 client.remainingPhases = 5
+client.currentLeader = ""
+client.currentTeam = ["","",""]
+client.currentVote = {}
+client.nodeHacked = 0
+client.amountOfNodeCommands = 0
+client.hostCtx = None
 
 @client.command()
 async def ready(ctx):
@@ -84,17 +91,18 @@ async def startGame(ctx):
             await ctx.send("You are not the Host! only the host can start the game!")
             return
         
-        if client.amountOfPlayers <= 6 :
+        if client.amountOfPlayers <= 5 :
             client.amountOfSpies = 1
         else:
             client.amountOfSpies = 2
-        tempDict = client.players
+        tempDict = client.players.copy()
         while client.amountOfSpies > 0:
             listHelper = list(tempDict.keys())
             randomSpy = listHelper[random.randint(0,len(listHelper)-1)]
             tempDict.pop(randomSpy)
             for current in ctx.guild.members:
                 if str(current) == randomSpy:
+                    client.spies[str(current)] = 1
                     message = "Your Role is: "
                     embed = discord.Embed(title=message + "Spy", description="Your job is to sabotage everything!\n\n!vote [yes/no], to vote on node-teams\n!secure, to secure a node\n!hack, to hack a node", color=0xff0000)
                     await current.send(embed=embed)
@@ -105,11 +113,149 @@ async def startGame(ctx):
                     embed = discord.Embed(title=message + "Innocent", description="Your job is to make sure everything goes well! find that spy!\n\n!vote [yes/no], to vote on node-teams\n!secure, to secure a node", color=0x00f7ff)
                     await current.send(embed=embed)
 
-        await ctx.send("Game Has Started!, make sure you checked your role in dm's!")
+        await ctx.send("Game Has Started! make sure you checked your role in dm's!")
+        
+        secondsTemp = 5
+        message = await ctx.send("Get Ready! " + str(secondsTemp) + " until the game starts!")
+        while True:
+            secondsTemp -= 1
+            if secondsTemp <= 0:
+                await message.edit(content="The first round is Starting!")
+                break
+            await message.edit(content="Get Ready! " + str(secondsTemp) + " until the game starts!")
+            await asyncio.sleep(1)
 
-
+        await newNode(ctx=ctx)
         return
+    
+async def newNode(ctx):
+    client.currentLeader = await getNewLeader()
+    await ctx.send(await printGamePhase())
+    await waitForSeconds(5)
+    await changeGamePhase()
+    await ctx.send(await printGamePhase())
+    return
+    
+@client.command()
+async def assemble(ctx, p1, p2, p3):
+    if (client.gamePhase != 1) or (str(ctx.author) != client.currentLeader):
+        await ctx.author.send("It is not currently the assembling phase, or you're not the current leader!")
+        return
+    await ctx.send("The chosen team is: " + p1 + ", " + p2 + " and " + p3 + "!")
+    client.currentTeam[0] = p1
+    client.currentTeam[1] = p2
+    client.currentTeam[2] = p3
+    client.currentVote = client.players.copy()
+    '''
+    try:
+        client.currentVote.pop(p1)
+        client.currentVote.pop(p2)
+        client.currentVote.pop(p3)
+    except:
+        print("NO SUCH PLAYER!")
+    '''
+    for current in client.currentVote:
+        client.currentVote[current][1] = 2
+    print(client.currentVote)
+    await ctx.send("Everyone else may now vote on this decision!")
+    return
 
+@client.command()
+async def vote(ctx, arg):
+    try:
+        if "N" in arg:
+            client.currentVote[str(ctx.author)][1] = 0
+        elif "Y" in arg:
+            client.currentVote[str(ctx.author)][1] = 1 
+    except:
+        print("NOT IN DICT")
+    countY = 0
+    countN = 0
+    for current in client.currentVote:
+        if client.currentVote[str(current)][1] == 1:
+            countY += 1
+        elif client.currentVote[str(current)][1] == 0:
+            countN += 1
+    await ctx.send("There are currently " + str(countY) + " votes FOR this team, and " + str(countN) + " AGAINST it!")
+
+@client.command()
+async def finishVote(ctx):
+    if (str(ctx.author) != client.currentLeader) or (client.gamePhase != 1):
+        await ctx.author.send("It is not currently the voting phase, or you're not the current leader!")
+        return
+    for current in client.currentVote:
+        if client.currentVote[str(current)][1] == 2:
+            await ctx.author.send("Not everyone has voted yet!")
+            return
+    countY = 0
+    countN = 0
+    for current in client.currentVote:
+        if client.currentVote[str(current)][1] == 1:
+            countY += 1
+        elif client.currentVote[str(current)][1] == 0:
+            countN += 1
+    if countY >= countN:
+        await ctx.send("The vote is over, and the team was voted FOR!")
+    else:
+        await ctx.send("The vote is over, and the team was voted AGAINST!")
+    await changeGamePhase()
+    await ctx.send(await printGamePhase())
+    await waitForSeconds(5)
+    await ctx.send("You may now decide on your action during the expedition!\n(do make sure you write your command to me in dms, otherwise you'll end up spoiling the game!)")
+    return      
+
+@client.event
+async def on_message(message):
+    await client.process_commands(message)
+    if ((client.gamePhase == 2) and (str(message.author) in client.currentTeam)):
+        if(str(message.content) == "secure"):
+            await message.channel.send("Node has been secured!")
+            client.amountOfNodeCommands += 1 
+        elif((str(message.content) == "hack") and (str(message.author) in client.spies)):
+            await message.channel.send("Node has been hacked!")   
+            client.amountOfNodeCommands += 1 
+            client.nodeHacked += 1  
+        if client.amountOfNodeCommands >= 3:
+            await changeGamePhase()
+            return
+    
+
+    
+async def changeGamePhase():
+    if client.gamePhase == 2:
+        client.gamePhase = 0
+        client.remainingPhases -= 1
+        await client.hostCtx.send("The expedition has now been concluded with...")
+        await client.hostCtx.send("The Node has been hacked " + str(client.nodeHacked) + " times!")
+        await client.hostCtx.send("There are " + str(client.remainingPhases) + " Nodes remaining!")
+        await client.hostCtx.send("The next Node will begin shortly!")
+        client.amountOfNodeCommands = 0
+        client.nodeHacked = 0
+        await waitForSeconds(5)
+        await newNode(client.hostCtx)
+    else:
+        client.gamePhase += 1
+
+async def printGamePhase():
+    if client.gamePhase == 0:
+        return "Current Phase: **TALKING!**\nMake sure you know who you want to vote for the expedition!\nYou have 90 seconds!\nThis Round's Leader is: " + client.currentLeader
+    elif client.gamePhase == 1:
+        return "Current Phase: **VOTING!**\nThe current leader can now assemble an expedition group, and the rest can vote on it!"
+    elif client.gamePhase == 2:
+        return "Current Phase: **EXPEDITION!**\nThose of you that are undertaking the expedition can now prepare to secure the node!\nYou have 15 seconds to decide!"
+    
+async def getNewLeader():
+    listHelper = list(client.players.keys())
+    currentRandom = random.randint(0,len(listHelper)-1)
+    return str(listHelper[currentRandom])
+
+async def waitForSeconds(seconds):
+    while True:
+        seconds -= 1
+        if seconds <= 0:
+            break
+        await asyncio.sleep(1)
+    print("Timer Ended!")
 
 async def generateSpy():
     return random.randint(0,3)
@@ -118,6 +264,7 @@ async def generateSpy():
 async def host(ctx):        
     #if (not await joinCall(ctx)):
         #return
+    client.hostCtx = ctx
     hostTemp = str(ctx.author)
     if not client.isHosted:    
         client.isHosted = True 
