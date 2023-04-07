@@ -35,8 +35,14 @@ client.nodeHacked = 0
 client.amountOfNodeCommands = 0
 client.hostCtx = None
 
+
+client.state = 0
+
 @client.command()
 async def ready(ctx):
+    if (client.state != 1):
+        return
+
     hostTemp = str(ctx.author)
 
     if hostTemp in client.players:
@@ -46,6 +52,9 @@ async def ready(ctx):
 
 @client.command()
 async def unready(ctx):
+    if (client.state != 1):
+        return
+
     hostTemp = str(ctx.author)
 
     if hostTemp in client.players:
@@ -73,16 +82,16 @@ async def checkIfPlayer(player):
 
 @client.command()
 async def startGame(ctx):
+    if (client.state != 1):
+        return
     if(not await checkIfPlayer(str(ctx.author))):
         return
-    '''
     if(not ctx.author.voice):
         await ctx.send("You are not in a voice channel!")
         return
     if(ctx.author.voice.channel != ctx.voice_client.channel):
         await ctx.send("You are not in the same channel as the Game Host!")
         return
-    '''
     if(not await checkEveryoneReady()):
         await ctx.send("Not everyone is ready!")
         return
@@ -129,6 +138,7 @@ async def startGame(ctx):
         return
     
 async def newNode(ctx):
+    client.state = 2
     client.currentLeader = await getNewLeader()
     await ctx.send(await printGamePhase())
     await waitForSeconds(5)
@@ -146,14 +156,12 @@ async def assemble(ctx, p1, p2, p3):
     client.currentTeam[1] = p2
     client.currentTeam[2] = p3
     client.currentVote = client.players.copy()
-    '''
     try:
         client.currentVote.pop(p1)
         client.currentVote.pop(p2)
         client.currentVote.pop(p3)
     except:
         print("NO SUCH PLAYER!")
-    '''
     for current in client.currentVote:
         client.currentVote[current][1] = 2
     print(client.currentVote)
@@ -262,8 +270,11 @@ async def generateSpy():
 
 @client.command()
 async def host(ctx):        
-    #if (not await joinCall(ctx)):
-        #return
+    if (client.state != 0):
+        return
+    if (not await joinCall(ctx)):
+        return
+    client.state = 1
     client.hostCtx = ctx
     hostTemp = str(ctx.author)
     if not client.isHosted:    
@@ -306,7 +317,6 @@ async def leavegame(ctx):
 
 @client.command()
 async def joingame(ctx):
-    '''
     if(not ctx.author.voice):
         await ctx.send("you must be in a voice channel to join a game!")
         return
@@ -314,7 +324,6 @@ async def joingame(ctx):
     if(ctx.author.voice.channel != ctx.voice_client.channel):
         await ctx.send("if you want to participate in the game you must be in the same voice channel as the bot!")
         return
-    '''
     
     if(str(ctx.author) in client.players): 
         await ctx.send(str(ctx.author) + " is already participating in the game!")
